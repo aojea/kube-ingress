@@ -1,0 +1,145 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-ingress
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-ingress
+  namespace: kube-ingress
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kube-ingress
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "networking.k8s.io"
+    resources:
+      - ingresses
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "networking.k8s.io"
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - "networking.k8s.io"
+    resources:
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kube-ingress
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-ingress
+subjects:
+- kind: ServiceAccount
+  name: kube-ingress
+  namespace: kube-ingress
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-ingress
+  namespace: kube-ingress
+  labels:
+    app: kube-ingress
+spec:
+  type: LoadBalancer 
+  selector:
+    app: kube-ingress
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8443
+    protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-ingress
+  namespace: kube-ingress
+  labels:
+    app: kube-ingress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-ingress
+  template:
+    metadata:
+      labels:
+        app: kube-ingress
+    spec:
+      # Use host networking to bind directly to the node's port for better performance
+      # but requires elevated privileges and possible port conflicts
+      hostNetwork: false
+      serviceAccountName: kube-ingress
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+      - name: kube-ingress
+        image: registry.k8s.io/networking/kube-ingress:v1.0.0
+        args:
+        - /bin/kube-ingress
+        - --http-addr=:8080
+        - --https-addr=:8443
+        - --v=2
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 443
+          name: https
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "90Mi"
+---

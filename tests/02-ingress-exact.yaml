@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-ingress-exact
+spec:
+  ingressClassName: kube-ingress
+  rules:
+  - http:
+      paths:
+      - pathType: Exact
+        path: /foo-exact
+        backend:
+          service:
+            name: foo-service
+            port:
+              number: 8080
+      - pathType: Exact
+        path: /bar-exact
+        backend:
+          service:
+            name: bar-service
+            port:
+              number: 8080

@@ -68,6 +68,13 @@ jobs:
     - name: Set up environment (download dependencies)
       run: |
         TMP_DIR=$(mktemp -d)
+        # ingress test framework
+        git clone --depth 1 https://github.com/kubernetes-sigs/ingress-controller-conformance.git ${TMP_DIR}/ingress-controller-conformance
+        cd ${TMP_DIR}/ingress-controller-conformance
+        make build
+        sudo cp ${TMP_DIR}/ingress-controller-conformance/bin/ingress-conformance /usr/local/bin/ingress-conformance
+        sudo chmod +x /usr/local/bin/ingress-conformance
+        cd -
         # Test binaries
         curl -L https://dl.k8s.io/${{ env.K8S_VERSION }}/kubernetes-test-linux-amd64.tar.gz -o ${TMP_DIR}/kubernetes-test-linux-amd64.tar.gz
         tar xvzf ${TMP_DIR}/kubernetes-test-linux-amd64.tar.gz \
@@ -128,7 +135,15 @@ jobs:
         /usr/local/bin/kubectl wait --timeout=1m --for=condition=ready pods --namespace=kube-system -l k8s-app=kube-dns
         /usr/local/bin/kubectl wait --timeout=1m --for=condition=ready pods --namespace=kube-ingress -l app=kube-ingress
 
-    - name: Run tests
+    - name: Run ingress conformance tests
+      run: |
+        /usr/local/bin/ingress-conformance         \
+          --ingress-class=kube-ingress             \
+          --no-colors                              \
+          --output-directory="${PWD}/_artifacts"   \
+          --wait-time-for-ingress-status=60s
+
+    - name: Run e2e tests
       run: |
         export KUBERNETES_CONFORMANCE_TEST='y'
         export E2E_REPORT_DIR=${PWD}/_artifacts
